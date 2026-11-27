@@ -591,10 +591,9 @@ public final class OwnTerrain {
 	public static boolean takes(ChunkSectionLayer layer) {
 		if (instance == null) return false;
 		if (layer != ChunkSectionLayer.TRANSLUCENT) return true;
-		// The option itself, not the frame's render state : the option is set before its allChanged() rebuild is
-		// scheduled, the render state follows a frame later, so a section compiled in between would land in a store not drawn.
-		// With improved transparency vanilla keeps translucent terrain (its OIT draws it).
-		boolean taken = TRANSLUCENT && !Minecraft.getInstance().options.improvedTransparency().get();
+		// Ask the game, not the raw option: with our renderer it reports classic transparency (see OwnOitCompatMixin), so
+		// translucent sections land in our store and are drawn by us. Without our renderer vanilla's answer stands.
+		boolean taken = TRANSLUCENT && !Minecraft.getInstance().gameRenderer.useImprovedTransparency();
 		if (!taken) uberAdded();  // this layer is about to be handed to vanilla's addSectionBuffersToUberBuffer
 		return taken;
 	}

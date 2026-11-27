@@ -41,6 +41,8 @@ During development these changes produced, for example, a 17% average fps and 63
 
 Fabric API is not required. Mods that need Sodium (such as Iris) cannot be used with this build. Distant Horizons works: with its Metal renderer it runs next to silicium's terrain, and if you set Distant Horizons to OpenGL, silicium turns its own renderer off while the other optimizations stay on.
 
+Improved Transparency (the game's OIT mode) is turned off while silicium's own renderer is active: OIT needs the vanilla opaque section buffers, which silicium replaces with its own geometry, so translucent terrain such as water would otherwise disappear. The classic transparency path draws those surfaces correctly.
+
 ## Install
 
 1. Install Fabric for Minecraft 26.3: <https://fabricmc.net/use/installer/> (in Prism: new instance, version 26.3, loader Fabric).
