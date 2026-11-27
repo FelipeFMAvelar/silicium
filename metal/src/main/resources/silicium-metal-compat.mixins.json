@@ -1,0 +1,8 @@
+{
+	"required": false,
+	"package": "silicium.metal.mixin.compat",
+	"plugin": "silicium.metal.mixin.compat.CompatMixinPlugin",
+	"compatibilityLevel": "JAVA_25",
+	"client": ["DhRenderApiMixin"],
+	"injectors": { "defaultRequire": 0 }
+}

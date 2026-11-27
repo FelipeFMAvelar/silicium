@@ -1,0 +1,8 @@
+{
+	"required": true,
+	"package": "silicium.metal.mixin.ownmesh",
+	"plugin": "silicium.metal.mixin.ownmesh.OwnMeshMixinPlugin",
+	"compatibilityLevel": "JAVA_25",
+	"client": ["OwnMeshCompilerMixin", "OwnMeshResultsMixin", "OwnMeshCompiledMixin", "OwnMeshLighterCacheMixin", "OwnMeshRegionAccessMixin", "OwnMeshSectionCopyMixin", "OwnMeshTintMixin", "OwnMeshRegionStateMixin"],
+	"injectors": { "defaultRequire": 1 }
+}

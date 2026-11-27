@@ -1,0 +1,14 @@
+{
+	"schemaVersion": 1,
+	"id": "silicium-metal",
+	"version": "${version}",
+	"name": "silicium",
+	"description": "Silicium: a native Apple Silicon Metal rendering backend.",
+	"license": ["Apache-2.0"],
+	"authors": ["Noah Dunnagan"],
+	"environment": "client",
+	"entrypoints": { "preLaunch": ["silicium.metal.Preload"] },
+	"mixins": ["silicium-metal.mixins.json", "silicium-metal-lod.mixins.json", "silicium-metal-gen.mixins.json", "silicium-metal-own.mixins.json", "silicium-metal-ownmesh.mixins.json", "silicium-metal-startup.mixins.json", "silicium-metal-qos.mixins.json", "silicium-metal-cpu.mixins.json", "silicium-metal-chunk.mixins.json", "silicium-metal-alloc.mixins.json", "silicium-metal-chunkio.mixins.json", "silicium-metal-edge.mixins.json", "silicium-metal-compat.mixins.json"],
+	"depends": { "fabricloader": ">=0.19.5", "minecraft": "~26.3", "java": ">=25" },
+	"breaks": { "sodium": "*" }
+}

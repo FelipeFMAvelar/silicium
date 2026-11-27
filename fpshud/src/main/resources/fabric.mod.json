@@ -1,0 +1,12 @@
+{
+	"schemaVersion": 1,
+	"id": "silicium-fps",
+	"version": "${version}",
+	"name": "silicium fps",
+	"description": "Shows the frame rate in the top-left corner.",
+	"license": "Apache-2.0",
+	"authors": ["Noah Dunnagan"],
+	"environment": "client",
+	"mixins": ["silicium-fps.mixins.json"],
+	"depends": { "fabricloader": ">=0.19.5", "minecraft": "~26.3", "java": ">=25" }
+}

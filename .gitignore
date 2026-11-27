@@ -1,0 +1,11 @@
+refs/
+build/
+.gradle/
+run/
+out/
+*.class
+__pycache__/
+silicium-pack-cache/
+dist/
+.replay-stamp
+.replay-lineage

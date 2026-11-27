@@ -1,0 +1,8 @@
+{
+	"required": true,
+	"package": "silicium.metal.mixin.qos",
+	"plugin": "silicium.metal.mixin.qos.QosMixinPlugin",
+	"compatibilityLevel": "JAVA_25",
+	"client": ["RenderQosMixin", "ServerQosMixin", "WorkerQosMixin"],
+	"injectors": { "defaultRequire": 1 }
+}

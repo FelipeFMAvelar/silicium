@@ -1,0 +1,10 @@
+silicium
+Copyright 2026 Noah Dunnagan
+
+This work was originally created as mcopt by Noah Dunnagan and is distributed as silicium as a derivative work.
+If you use or redistribute this code, keep this NOTICE with it and retain the original attribution:
+  Copyright 2026 Noah Dunnagan — https://github.com/noahdunnagan/mcopt
+
+The present-on-a-second-queue idea came from ByteV0rtex (upstream presentation issue #2, credited here).
+
+silicium is licensed under the Apache License, Version 2.0 (LICENSE).

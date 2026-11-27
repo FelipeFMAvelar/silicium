@@ -1,0 +1,126 @@
+plugins {
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+}
+
+version = '0.3.0-alpha.2'
+
+dependencies {
+	minecraft "com.mojang:minecraft:${minecraft_version}"
+	implementation "net.fabricmc:fabric-loader:${loader_version}"
+	// Our mesher's FRAPI path (silicium.metal.own.OwnFrapi, loaded only when Fabric API's renderer API is): compile only, never bundled.
+	compileOnly "net.fabricmc.fabric-api:fabric-renderer-api-v1:17.0.15+79385d0b5d"
+	compileOnly "net.fabricmc.fabric-api:fabric-api-base:2.0.6+fcdff87f5d"
+}
+
+def nativeOut = layout.buildDirectory.dir('natives/natives')
+
+// Silicium targets the build host's Apple Silicon generation so the native noise/mesher code gets the M5's full
+// instruction set and scheduler model. Override with -Psilicium.cpu=generic for a jar that must run on older Macs,
+// or -Psilicium.cpu=apple-m4 / apple-m6 to target a specific chip. The Java side stays portable (the JIT detects
+// the host at runtime); only this dylib is host-tuned.
+def hostChip = {
+	try { ['/usr/sbin/sysctl', '-n', 'machdep.cpu.brand_string'].execute(null, rootDir).text.trim() } catch (Throwable ignored) { '' }
+}()
+def cpuTarget = (project.findProperty('silicium.cpu') ?: (
+	hostChip.contains('M5') ? 'apple-m5' :
+	hostChip.contains('M6') ? 'apple-m6' :
+	hostChip.contains('M4') ? 'apple-m4' :
+	hostChip.contains('M3') ? 'apple-m3' : '')).toString()
+def cpuFlags = (cpuTarget && cpuTarget != 'generic') ? ['-mcpu=' + cpuTarget] : []
+
+tasks.register('compileNative', Exec) {
+	def sources = ['mcmetal.m', 'mclod.m', 'lodseam.m', 'lodmesh.c', 'lodnoise.c', 'rec.m', 'mcown.m', 'mccap.m'].collect { file("src/main/native/$it") }
+	def output = nativeOut.get().file('libmcmetal.dylib').asFile
+	inputs.files sources, file('src/main/native/mcmetal.h'), file('src/main/native/lodmesh.h')
+	inputs.property 'cpuTarget', cpuTarget
+	outputs.file output
+	doFirst { output.parentFile.mkdirs() }
+	commandLine(['clang', '-fno-objc-arc', '-O3', '-flto', '-Wall', '-arch', 'arm64'] + cpuFlags +
+		['-mmacosx-version-min=15.0', '-dynamiclib', '-install_name', '@rpath/libmcmetal.dylib',
+		'-framework', 'CoreGraphics', '-framework', 'CoreVideo', '-framework', 'Foundation', '-framework', 'Metal', '-framework', 'QuartzCore', '-o', output] + sources)
+}
+
+// silicium item 3: precompile the hand-written shaders to .metallib at build time. Each library is named with an FNV-1a
+// hash of "silicium-metallib-v1|" + the exact source bytes; the Java side computes the same hash and registers the
+// extracted resource with native, which loads it with newLibraryWithURL:. A hash mismatch or any load failure falls back
+// to the existing newLibraryWithSource path (and its MSL 4 -> 3.1 fallback), so an absent/stale/mismatched library can
+// never change what is drawn. Keep -mmacosx-version-min=15.0 on the metallib as on the dylib.
+def shaderSalt = 'silicium-metallib-v1|'
+def shaderHash = { byte[] data ->
+	// BigInteger keeps Groovy's arithmetic from promoting or throwing on 64-bit overflow; mask to unsigned 64 bits so
+	// the result string matches Java's Long.toUnsignedString and mcmetal.h's uint64 FNV-1a.
+	def mask = new BigInteger('ffffffffffffffff', 16)
+	java.math.BigInteger h = java.math.BigInteger.valueOf(1469598103934665603L)
+	data.each { b -> h = h.xor(java.math.BigInteger.valueOf(b & 0xff)).multiply(java.math.BigInteger.valueOf(1099511628211L)).and(mask) }
+	return h.toString(16)
+}
+def shaderAir = layout.buildDirectory.dir('tmp/shader-air')
+def shaderLib = layout.buildDirectory.dir('generated/shaders')
+def shaderSources = [
+	[name: 'terrain', file: file('src/main/resources/silicium/own/terrain.metal'), flags: ['-ffast-math']],
+	[name: 'columns', file: file('src/main/resources/silicium/lod/columns.metal'), flags: ['-fmetal-math-mode=safe']],
+	[name: 'seam', file: file('src/main/resources/silicium/lod/seam.metal'), flags: ['-fmetal-math-mode=safe']],
+	[name: 'rec', file: file('src/main/resources/silicium/rec/rec.metal'), flags: []],
+	[name: 'icb', file: file('src/main/resources/silicium/own/icb.metal'), flags: ['-fmetal-math-mode=safe']]
+]
+// Only on a Mac with the Metal toolchain installed; elsewhere the jar ships without .metallib and the source path runs.
+def metalAvailable = {
+	try {
+		def p = ['xcrun', '--find', 'metal'].execute(null, rootDir)
+		p.waitFor() == 0 && p.text.trim()
+	} catch (Throwable ignored) { false }
+}()
+tasks.register('compileShaders') {
+	enabled = (boolean) metalAvailable
+	inputs.files shaderSources.collect { it.file }
+	inputs.property 'shaderSalt', shaderSalt
+	outputs.dir shaderLib
+	doLast {
+		// Clear stale libraries from earlier builds (source edits change the FNV name); otherwise old, dead
+		// .metallib files accumulate in the jar. Each build publishes exactly the current five shaders.
+		shaderLib.get().asFile.deleteDir()
+		shaderAir.get().asFile.mkdirs()
+		shaderLib.get().asFile.mkdirs()
+		shaderSources.each { s ->
+			byte[] data = s.file.bytes
+			byte[] salt = shaderSalt.getBytes('UTF-8')
+			byte[] key = new byte[salt.length + data.length]
+			System.arraycopy(salt, 0, key, 0, salt.length)
+			System.arraycopy(data, 0, key, salt.length, data.length)
+			String hash = shaderHash(key)
+			File air = shaderAir.get().file("${s.name}-${hash}.air").asFile
+			File lib = shaderLib.get().file("${s.name}-${hash}.metallib").asFile
+			def runShaderTool = { List<String> cmd ->
+				Process p = new ProcessBuilder(cmd).redirectErrorStream(true).directory(rootDir).start()
+				String out = p.inputStream.getText('UTF-8')
+				if (p.waitFor() != 0) throw new GradleException("Shader tool failed: ${cmd.join(' ')}\n${out}")
+			}
+			runShaderTool(['xcrun', 'metal', '-std=metal4.0', '-mmacosx-version-min=15.0', '-O2'] + s.flags +
+				['-c', s.file.absolutePath, '-o', air.absolutePath])
+			runShaderTool(['xcrun', 'metallib', '-o', lib.absolutePath, air.absolutePath])
+		}
+	}
+}
+
+processResources {
+	dependsOn 'compileNative', 'compileShaders'
+	from(layout.buildDirectory.dir('natives'))
+	from(shaderLib) { into 'silicium/shaders' }
+	inputs.property 'version', version
+	filesMatching('fabric.mod.json') { expand 'version': version }
+}
+
+// Double-clicking the jar (java -jar) explains that it's a Fabric mod and how to install it.
+jar {
+	manifest { attributes 'Main-Class': 'silicium.metal.InstallHelp', 'Implementation-Version': version }
+	// Apache-2.0 asks for LICENSE and NOTICE in every copy.
+	from(rootProject.file('LICENSE'))
+	from(rootProject.file('NOTICE'))
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 25
+	// the far terrain's Vector API noise control (LodNoiseVector, opt-in -Dsilicium.lod.nativeNoise=vector): loaded only when the game runs with
+	// --add-modules jdk.incubator.vector
+	if (it.name == 'compileJava') it.options.compilerArgs += ['--add-modules', 'jdk.incubator.vector']
+}

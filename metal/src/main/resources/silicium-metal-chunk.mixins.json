@@ -1,0 +1,23 @@
+{
+	"required": true,
+	"package": "silicium.metal.mixin.chunk",
+	"plugin": "silicium.metal.mixin.chunk.ChunkMixinPlugin",
+	"compatibilityLevel": "JAVA_25",
+	"client": [
+		"PalettedContainerFactoryMixin",
+		"AcquirePoiMixin",
+		"PoiWriteMixin",
+		"PoiSectionAccessor",
+		"SectionStorageAccess",
+		"ServerLevelTickMixin",
+		"LevelRandAccessor",
+		"DataLayerStorageMapMixin",
+		"BlockLightMapMixin",
+		"SkyLightMapMixin",
+		"ChunkAccessSectionMixin",
+		"SpawnChunkFilterMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

@@ -1,0 +1,8 @@
+{
+	"required": true,
+	"package": "silicium.metal.mixin.startup",
+	"plugin": "silicium.metal.mixin.startup.StartupMixinPlugin",
+	"compatibilityLevel": "JAVA_25",
+	"client": ["NarratorMixin", "CrashPreloadMixin", "BlockCacheMixin", "BootstrapCacheMixin", "FadeMixin"],
+	"injectors": { "defaultRequire": 1 }
+}
