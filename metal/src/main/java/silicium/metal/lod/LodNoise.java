@@ -334,8 +334,16 @@ final class LodNoise {
 		if (top >= this.seaLevel) return LodTile.DRY;
 		try {
 			BlockState over = aquifer.computeSubstance(x, top, z, Math.min(-1e-4F, interpolatedAt(col, top, y0)));
-			if (over == null || !over.getFluidState().is(net.minecraft.tags.FluidTags.WATER)) return LodTile.DRY;
 			int y = top;
+			if (over == null || !over.getFluidState().is(net.minecraft.tags.FluidTags.WATER)) {
+				// Right over the ground the aquifer can answer for a barrier (or a lower local level) even under the open sea.
+				// The column belongs to the sea when there's water just under sea level; otherwise it's really dry and a
+				// waterless column would hang below the surface at the hand-off to the real terrain.
+				int sea = this.seaLevel - 1;
+				BlockState at = aquifer.computeSubstance(x, sea, z, Math.min(-1e-4F, interpolatedAt(col, sea, y0)));
+				if (at == null || !at.getFluidState().is(net.minecraft.tags.FluidTags.WATER)) return LodTile.DRY;
+				y = sea;
+			}
 			while (y < this.seaLevel + 16) {
 				BlockState next = aquifer.computeSubstance(x, y + 1, z, Math.min(-1e-4F, interpolatedAt(col, y + 1, y0)));
 				if (next == null || !next.getFluidState().is(net.minecraft.tags.FluidTags.WATER)) break;
