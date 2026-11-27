@@ -105,6 +105,16 @@ public final class OwnTerrain {
 	 * one draw a frame whose instance order is vanilla's visible sections far to near.
 	 */
 	public static final boolean TRANSLUCENT = Boolean.getBoolean("silicium.own.translucent");
+	/**
+	 * -Dsilicium.own.rgssEarly (default true): with RGSS filtering, where the blend weight is 0 the result is exactly the
+	 * nearest sample, so the eight RGSS samples are skipped. Bit-identical to the vanilla path.
+	 */
+	private static final boolean RGSS_EARLY = Boolean.parseBoolean(System.getProperty("silicium.own.rgssEarly", "true"));
+	/**
+	 * -Dsilicium.own.rgssTri: RGSS's two mip levels blended by the atlas sampler's linear mip filter (4 samples instead of 8).
+	 * Opt-in because the hardware's mip fraction can round differently: not vanilla-exact.
+	 */
+	private static final boolean RGSS_TRI = Boolean.getBoolean("silicium.own.rgssTri");
 	/** -Dsilicium.own.level=true: opaque terrain samples the atlas at a computed level instead of with gradients (see terrain.metal). */
 	private static final boolean LEVEL = Boolean.getBoolean("silicium.own.level");
 	/**
@@ -453,7 +463,7 @@ public final class OwnTerrain {
 		this.encoder = encoder;
 		this.ctx = MetalBridge.ctx(encoder);
 		this.enc = MetalBridge.enc(encoder);
-		this.own = OwnNative.create(this.ctx, (OwnPosTable.ON ? "#define OWN_EXACT_POS 1\n" : "") + (OwnQrec.ON ? "#define OWN_QREC 1\n" : "") + (VCOUNT ? "#define OWN_VCOUNT 1\n" : "") + (TFLAT ? "#define OWN_TFLAT 1\n" : "") + (TPROBE > 0 ? "#define OWN_TPROBE " + TPROBE + "\n" : "") + (OwnFrag.EXACT_SHIFT != 2 ? "#define A1_SH " + OwnFrag.EXACT_SHIFT + "\n" : "") + resource("/silicium/own/terrain.metal"), COMPACT, FAT, CPU_CLIP);
+		this.own = OwnNative.create(this.ctx, (OwnPosTable.ON ? "#define OWN_EXACT_POS 1\n" : "") + (OwnQrec.ON ? "#define OWN_QREC 1\n" : "") + (VCOUNT ? "#define OWN_VCOUNT 1\n" : "") + (TFLAT ? "#define OWN_TFLAT 1\n" : "") + (RGSS_EARLY ? "" : "#define OWN_RGSS_VANILLA 1\n") + (RGSS_TRI ? "#define OWN_RGSS_TRI 1\n" : "") + (TPROBE > 0 ? "#define OWN_TPROBE " + TPROBE + "\n" : "") + (OwnFrag.EXACT_SHIFT != 2 ? "#define A1_SH " + OwnFrag.EXACT_SHIFT + "\n" : "") + resource("/silicium/own/terrain.metal"), COMPACT, FAT, CPU_CLIP);
 		// -Dsilicium.own.hizTile=true: the per-quad path's pyramid in one tiled pass for its first five levels (padded to 32 texels)
 		applyNativeFlags();
 		// -Dsilicium.own.gputime=true: GPU timestamps of our compute encoders (cull, list build, pyramid + test), logged per 500 frames

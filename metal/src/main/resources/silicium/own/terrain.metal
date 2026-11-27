@@ -2192,6 +2192,17 @@ static HCol sampleNearest(texture2d<float> source, sampler s, float2 uv, float2 
 	return sampleNearestG(source, s, uv, pixelSize, du, dv, texelScreenSize);
 }
 
+#ifdef OWN_RGSS_VANILLA
+#define RGSS_EARLY 0
+#else
+#define RGSS_EARLY 1
+#endif
+#ifdef OWN_RGSS_TRI
+#define RGSS_TRI 1
+#else
+#define RGSS_TRI 0
+#endif
+
 static HCol sampleRGSS(texture2d<float> source, sampler s, float2 uv, float2 pixelSize) {
 	float2 du = dfdx(uv);
 	float2 dv = dfdy(uv);
@@ -2201,35 +2212,57 @@ static HCol sampleRGSS(texture2d<float> source, sampler s, float2 uv, float2 pix
 	float transitionStart = minPixelSize * 1.0;
 	float transitionEnd = minPixelSize * 2.0;
 	float blendFactor = smoothstep(transitionStart, transitionEnd, maxTexelSize);
+	// The result is mix(nearest, rgss, blendFactor). At 0 (a texel at least a pixel wide, most of a near view) that is
+	// exactly the nearest sample, so the eight RGSS samples can be skipped. take the nearest first so a SIMD group mixing
+	// near and far fragments doesn't pay for it twice.
+	HCol nearest = HCol { half4(0.0h), 0.0f };
+	if (!RGSS_TRI || blendFactor < 1.0f) nearest = sampleNearestG(source, s, uv, pixelSize, du, dv, texelScreenSize);
+	if (RGSS_EARLY && blendFactor <= 0.0f) return nearest;
 	float duLength = length(du);
 	float dvLength = length(dv);
 	float minDerivative = min(duLength, dvLength);
 	float maxDerivative = max(duLength, dvLength);
 	float effectiveDerivative = sqrt(minDerivative * maxDerivative);
 	float mipLevelExact = max(0.0, log2(effectiveDerivative / minPixelSize));
-	float mipLevelLow = floor(mipLevelExact);
-	float mipLevelHigh = mipLevelLow + 1.0;
-	float mipBlend = fract(mipLevelExact);
 	const float2 offsets[4] = {float2(0.125, 0.375), float2(-0.125, -0.375), float2(0.375, -0.125), float2(-0.375, 0.125)};
-	half4 rgssColorLow = half4(0.0h);
-	half4 rgssColorHigh = half4(0.0h);
-	float alphaLow = 0.0f, alphaHigh = 0.0f;
-	for (int i = 0; i < 4; ++i) {
-		float2 sampleUV = uv + offsets[i] * pixelSize;
-		float4 lo = source.sample(s, sampleUV, level(mipLevelLow));
-		float4 hi = source.sample(s, sampleUV, level(mipLevelHigh));
-		rgssColorLow += half4(lo);
-		rgssColorHigh += half4(hi);
-		alphaLow += lo.a;
-		alphaHigh += hi.a;
+	half4 rgssColor;
+	float rgssAlpha;
+	if (RGSS_TRI) {
+		// The atlas sampler's mip filter is linear, so one sample at the exact level blends the two levels around it:
+		// four samples instead of eight. Hardware rounding of the level fraction makes this opt-in, not bit-exact.
+		rgssColor = half4(0.0h);
+		rgssAlpha = 0.0f;
+		for (int i = 0; i < 4; ++i) {
+			float4 px = source.sample(s, uv + offsets[i] * pixelSize, level(mipLevelExact));
+			rgssColor += half4(px);
+			rgssAlpha += px.a;
+		}
+		rgssColor *= 0.25h;
+		rgssAlpha *= 0.25f;
+		if (blendFactor >= 1.0f) return HCol { rgssColor, rgssAlpha };
+	} else {
+		float mipLevelLow = floor(mipLevelExact);
+		float mipLevelHigh = mipLevelLow + 1.0;
+		float mipBlend = fract(mipLevelExact);
+		half4 rgssColorLow = half4(0.0h);
+		half4 rgssColorHigh = half4(0.0h);
+		float alphaLow = 0.0f, alphaHigh = 0.0f;
+		for (int i = 0; i < 4; ++i) {
+			float2 sampleUV = uv + offsets[i] * pixelSize;
+			float4 lo = source.sample(s, sampleUV, level(mipLevelLow));
+			float4 hi = source.sample(s, sampleUV, level(mipLevelHigh));
+			rgssColorLow += half4(lo);
+			rgssColorHigh += half4(hi);
+			alphaLow += lo.a;
+			alphaHigh += hi.a;
+		}
+		rgssColorLow *= 0.25h;
+		rgssColorHigh *= 0.25h;
+		alphaLow *= 0.25f;
+		alphaHigh *= 0.25f;
+		rgssColor = mix(rgssColorLow, rgssColorHigh, half(mipBlend));
+		rgssAlpha = mix(alphaLow, alphaHigh, mipBlend);
 	}
-	rgssColorLow *= 0.25h;
-	rgssColorHigh *= 0.25h;
-	alphaLow *= 0.25f;
-	alphaHigh *= 0.25f;
-	half4 rgssColor = mix(rgssColorLow, rgssColorHigh, half(mipBlend));
-	float rgssAlpha = mix(alphaLow, alphaHigh, mipBlend);
-	HCol nearest = sampleNearestG(source, s, uv, pixelSize, du, dv, texelScreenSize);
 	return HCol { mix(nearest.c, rgssColor, half(blendFactor)), mix(nearest.a, rgssAlpha, blendFactor) };
 }
 
