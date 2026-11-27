@@ -98,6 +98,9 @@ final class OwnNative {
 				own = (long) NEW.invokeExact(ctx, src, compact ? 1 : 0, fat ? 1 : 0, cpuClip ? 1 : 0, err, 16384);
 			} catch (Throwable t) {
 				throw rethrow(t);
+			} finally {
+				// mco_new copies the source into an NSString before compiling, so the native buffer is not kept.
+				MemoryUtil.nmemFree(src);
 			}
 			if (own == 0) throw new IllegalStateException(MemoryUtil.memUTF8(err));
 			return own;
