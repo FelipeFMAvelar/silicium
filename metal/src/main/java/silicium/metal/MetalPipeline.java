@@ -132,8 +132,17 @@ public final class MetalPipeline implements BackendRenderPipeline {
 
 	/** Metal bakes the depth attachment format into the pipeline, so like Vulkan there's one for passes with depth and one without. */
 	final long withDepth;
-	final long withoutDepth;
+	/**
+	 * 0 for a pipeline with a depth state until a pass without a depth attachment draws with it (see {@link #withoutDepth()}).
+	 * Use the method: binding this field directly would hand Metal a nil pipeline state and silently drop the draw.
+	 */
+	private long withoutDepth;
 	final long depthState;
+	/** Depth state to bind with {@link #withoutDepth()}: always pass, never write (there is no depth attachment). */
+	private long depthStateWithoutDepth;
+	/** MSL for building that variant on first use; nulled once it exists. */
+	private @Nullable Translated vertexSource, fragmentSource;
+	private final CreateInfo info;
 	final List<BindGroupLayout.UniformDescription> uniforms;
 	final boolean cull;
 	final boolean wireframe;
@@ -152,6 +161,8 @@ public final class MetalPipeline implements BackendRenderPipeline {
 		this.withoutDepth = withoutDepth;
 		this.depthState = depthState;
 		this.depthCompare = depthCompare;
+		this.info = info;
+		this.depthStateWithoutDepth = withoutDepth != 0 ? depthState : 0;
 		this.name = info.name();
 		this.uniforms = info.uniforms();
 		this.cull = info.cull();
@@ -208,6 +219,10 @@ public final class MetalPipeline implements BackendRenderPipeline {
 			int compare = depth == null ? 7 : MetalConst.compare(depth.depthTest());
 			long depthState = Native.depthStateNew(ctx, compare, depth != null && depth.writeDepth() ? 1 : 0);
 			MetalPipeline pipeline = new MetalPipeline(encoder, withDepth, withoutDepth, depthState, compare, info);
+			if (withoutDepth == 0) {
+				pipeline.vertexSource = v;
+				pipeline.fragmentSource = f;
+			}
 			return pipeline;
 		} finally {
 			if (vlib != 0) Native.release(vlib);
@@ -234,6 +249,41 @@ public final class MetalPipeline implements BackendRenderPipeline {
 		} finally {
 			MemoryUtil.memFree(src);
 		}
+	}
+
+	/**
+	 * Pipeline state for a pass without a depth attachment. A pipeline that has a depth test can still be drawn into a
+	 * colour-only target (improved transparency's water passes, or a mod's HUD), where GL/Vulkan skip the test. Build the
+	 * variant on first use; pipelines that only ever draw with depth pay nothing extra.
+	 */
+	long withoutDepth() {
+		if (this.withoutDepth == 0) {
+			Translated v = Objects.requireNonNull(this.vertexSource, this.name), f = Objects.requireNonNull(this.fragmentSource, this.name);
+			long ctx = this.encoder.ctx, vlib = 0, flib = 0;
+			try (MemoryStack stack = MemoryStack.stackPush()) {
+				long err = stack.nmalloc(1, 4096);
+				vlib = library(ctx, v.msl, err);
+				if (vlib == 0) throw new IllegalStateException(this.name + " vertex: " + MemoryUtil.memUTF8(err) + "\n" + v.msl);
+				flib = library(ctx, f.msl, err);
+				if (flib == 0) throw new IllegalStateException(this.name + " fragment: " + MemoryUtil.memUTF8(err) + "\n" + f.msl);
+				long vname = MemoryUtil.memAddress(stack.UTF8(v.entry)), fname = MemoryUtil.memAddress(stack.UTF8(f.entry));
+				if (GPU_COUNT) Native.gpuCountLabel(this.name + " (no depth)");
+				long pso = pipelineNewCounted(ctx, vlib, vname, flib, fname, describe(stack, this.info, false, true), err, 4096);
+				if (pso == 0) throw new IllegalStateException(this.name + " (no depth): " + MemoryUtil.memUTF8(err));
+				this.withoutDepth = pso;
+				this.depthStateWithoutDepth = Native.depthStateNew(ctx, 7, 0);  // always pass, no write: no depth to test
+				this.vertexSource = this.fragmentSource = null;
+			} finally {
+				if (vlib != 0) Native.release(vlib);
+				if (flib != 0) Native.release(flib);
+			}
+		}
+		return this.withoutDepth;
+	}
+
+	/** The depth state to bind with {@link #withoutDepth()}; call that first. */
+	long depthStateWithoutDepth() {
+		return this.depthStateWithoutDepth;
 	}
 
 	/** -Dsilicium.metal.dumpMsl=DIR writes every pipeline's generated Metal source there, for reading what the GPU actually runs. */
@@ -439,6 +489,7 @@ public final class MetalPipeline implements BackendRenderPipeline {
 			this.closed = true;
 			this.encoder.releaseLater(this.withDepth);
 			if (this.withoutDepth != 0) this.encoder.releaseLater(this.withoutDepth);
+			if (this.depthStateWithoutDepth != 0 && this.depthStateWithoutDepth != this.depthState) this.encoder.releaseLater(this.depthStateWithoutDepth);
 			this.encoder.releaseLater(this.depthState);
 		}
 	}
