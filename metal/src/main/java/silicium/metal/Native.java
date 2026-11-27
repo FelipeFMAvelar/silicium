@@ -129,10 +129,12 @@ final class Native {
 	private static Path extract() {
 		try (InputStream in = Native.class.getResourceAsStream("/natives/libmcmetal.dylib")) {
 			Path dir = Files.createTempDirectory("mcmetal");
+			// deleteOnExit deletes in reverse registration order: register the directory first so the library is removed
+			// before the JVM tries to remove the directory it lives in.
+			dir.toFile().deleteOnExit();
 			Path lib = dir.resolve("libmcmetal.dylib");
 			Files.copy(in, lib, StandardCopyOption.REPLACE_EXISTING);
 			lib.toFile().deleteOnExit();
-			dir.toFile().deleteOnExit();
 			return lib;
 		} catch (IOException e) {
 			throw new IllegalStateException("can't extract libmcmetal.dylib", e);
