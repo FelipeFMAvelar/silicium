@@ -4,6 +4,8 @@ A Minecraft performance mod for Apple Silicon Macs. No Sodium needed.
 
 silicium redraws Minecraft using Apple's own graphics technology instead of the old OpenGL path the game normally uses on a Mac. It is an early alpha: expect bugs, and back up your worlds.
 
+<img width="1252" height="652" alt="image" src="https://github.com/user-attachments/assets/483bd082-d928-4b17-84cc-db2b8d21cde1" />
+
 ## What it does
 
 Minecraft Java Edition was built for OpenGL, an old graphics API that Apple no longer supports properly. On a Mac, OpenGL is translated into Metal — the API the M chip actually speaks — every time the game draws a frame. silicium cuts out that translation and talks to Metal directly. It also replaces several of the game's busiest jobs with faster versions:
