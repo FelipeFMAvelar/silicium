@@ -1,6 +1,7 @@
 package silicium.metal.lod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
 import com.mojang.renderpearl.frontend.FrontendCommandEncoder;
 import java.io.IOException;
 import java.io.InputStream;
@@ -308,7 +309,14 @@ public final class Lod {
 		this.camX = camera.pos.x;
 		this.camY = camera.pos.y;
 		this.camZ = camera.pos.z;
-		Matrix4f proj = new Matrix4f(camera.projectionMatrix);
+		// Use the level projection GameRenderer.renderLevel set, which carries view bobbing, hurt tilt and the nausea skew.
+		// camera.projectionMatrix has none of them, so far terrain stayed still while the real terrain moved. If the buffer
+		// isn't CPU-readable (bufferAddress 0), fall back to the plain camera projection.
+		Matrix4f proj = new Matrix4f();
+		GpuBufferSlice projection = RenderSystem.getProjectionMatrixBuffer();
+		long pa = projection != null ? MetalBridge.bufferAddress(projection.buffer()) : 0;
+		if (pa != 0) proj.setFromAddress(pa + projection.offset());
+		else proj.set(camera.projectionMatrix);
 		this.viewProj.set(proj).mul(camera.viewRotationMatrix);
 		camera.viewRotationMatrix.positiveZ(this.forward).negate();
 		this.frustum.set(this.viewProj, false);
