@@ -13,6 +13,7 @@ import java.io.UncheckedIOException;
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.Linker;
 import java.lang.invoke.MethodHandle;
+import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -186,9 +187,9 @@ public final class MetalPipeline implements BackendRenderPipeline {
 				f = new Translated("// " + UNCACHED_NONCE + "\n" + f.msl, f.entry);
 			}
 			t1 = System.nanoTime();
-			vlib = Native.libraryNew(ctx, MemoryUtil.memAddress(stack.UTF8(v.msl)), err, 4096);
+			vlib = library(ctx, v.msl, err);
 			if (vlib == 0) throw new IllegalStateException(info.name() + " vertex: " + MemoryUtil.memUTF8(err) + "\n" + v.msl);
-			flib = Native.libraryNew(ctx, MemoryUtil.memAddress(stack.UTF8(f.msl)), err, 4096);
+			flib = library(ctx, f.msl, err);
 			if (flib == 0) throw new IllegalStateException(info.name() + " fragment: " + MemoryUtil.memUTF8(err) + "\n" + f.msl);
 			t2 = System.nanoTime();
 			long vname = MemoryUtil.memAddress(stack.UTF8(v.entry)), fname = MemoryUtil.memAddress(stack.UTF8(f.entry));
@@ -217,6 +218,19 @@ public final class MetalPipeline implements BackendRenderPipeline {
 				libraryNs += t2 - t1;
 				stateNs += t3 - t2;
 			}
+		}
+	}
+
+	/**
+	 * The MSL source goes on the heap: LWJGL's thread-local stack is 64 KB, and a resource pack's core shaders can translate to
+	 * more than that. Native.libraryNew copies the source before it returns, so the buffer can be freed right after the call.
+	 */
+	private static long library(long ctx, String msl, long err) {
+		ByteBuffer src = MemoryUtil.memUTF8(msl);
+		try {
+			return Native.libraryNew(ctx, MemoryUtil.memAddress(src), err, 4096);
+		} finally {
+			MemoryUtil.memFree(src);
 		}
 	}
 
