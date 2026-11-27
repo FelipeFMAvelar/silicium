@@ -14,7 +14,7 @@ Minecraft Java Edition was built for OpenGL, an old graphics API that Apple no l
 - **Startup.** Classes and other data are prepared ahead of time on background threads while the game is loading.
 - **Far terrain** (optional). A second, much cheaper representation of distant land with smooth transitions into the real world. It is off by default and can be enabled with `-Dsilicium.lod=true`.
 - **Recording** (optional). Records straight from the GPU to video with `-Dsilicium.rec=out.mp4`.
-- **FPS counter.** A small `NN fps` label in the top-left corner, hidden by F1 or F3.
+- **FPS counter.** A small `NN fps` label in the top-left corner, hidden by F1 or F3; add `-Dsilicium.fps=false` to turn it off entirely.
 
 ## Why it is much faster on M-series Macs
 

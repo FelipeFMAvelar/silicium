@@ -19,13 +19,16 @@ abstract class HudMixin {
 	@Shadow @Final private Minecraft minecraft;
 	@Shadow public abstract boolean isHidden();
 
+	/** -Dsilicium.fps=false hides the counter (it is on by default). */
+	private static final boolean FPS = Boolean.parseBoolean(System.getProperty("silicium.fps", "true"));
+
 	// The count changes once a second; the label is rebuilt only then, not every frame.
 	@Unique private int siliciumFps$shown = -1;
 	@Unique private String siliciumFps$label = "";
 
 	@Inject(method = "extractRenderState", at = @At("TAIL"))
 	private void siliciumFps$draw(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker, CallbackInfo ci) {
-		if (this.isHidden() || this.minecraft.getDebugOverlay().showDebugScreen() || this.minecraft.gui.screen() instanceof LevelLoadingScreen) {
+		if (!FPS || this.isHidden() || this.minecraft.getDebugOverlay().showDebugScreen() || this.minecraft.gui.screen() instanceof LevelLoadingScreen) {
 			return;
 		}
 		int fps = this.minecraft.getFps();
